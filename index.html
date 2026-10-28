@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Гриша 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #fff;
+    color: #000;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px;
+    user-select: none;
+    -webkit-user-select: none;
+    width: 100%;
+    overflow-x: hidden;
+  }
+  #hud {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 4px 0;
+    border-bottom: 2px solid #000;
+    margin-bottom: 6px;
+  }
+  #canvas-container {
+    width: 100%;
+    max-width: 480px;
+    aspect-ratio: 1 / 1;
+    border: 3px solid #000;
+    position: relative;
+    background: #fff;
+    touch-action: none;
+    cursor: grab;
+  }
+  #canvas-container:active {
+    cursor: grabbing;
+  }
+  .toolbar {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 5px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  button {
+    background: #fff;
+    color: #000;
+    border: 2px solid #000;
+    font-family: inherit;
+    font-weight: bold;
+    padding: 5px 6px;
+    cursor: pointer;
+    font-size: 11px;
+    flex: 1 1 auto;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  button:hover, button.active {
+    background: #000;
+    color: #fff;
+  }
+  button svg {
+    stroke: currentColor;
+  }
+  input[type="number"] {
+    width: 60px;
+    border: 2px solid #000;
+    padding: 4px;
+    font-family: inherit;
+    font-weight: bold;
+    font-size: 11px;
+    text-align: center;
+  }
+  #weights-wrap {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 6px;
+  }
+  #weights-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .icon-btn {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+  }
+  textarea {
+    width: 100%;
+    height: 105px;
+    border: 2px solid #000;
+    font-family: monospace;
+    font-size: 10px;
+    padding: 4px;
+    resize: vertical;
+    white-space: pre;
+    color: #000;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div>ПОПЫТКИ: <span id="v-ep">0</span></div>
+  <div>EPS: <span id="v-eps">1.0000</span></div>
+  <div>BEST: <span id="v-best">0</span></div>
+  <div>СЧЁТ: <span id="v-score">0</span></div>
+</div>
+
+<div id="canvas-container"></div>
+
+<div class="toolbar">
+  <button id="b-1" class="active" onclick="setSpeed(1)">1x</button>
+  <button id="b-10" onclick="setSpeed(10)">10x</button>
+  <button id="b-100" onclick="setSpeed(100)">100x</button>
+  <button id="b-1000" onclick="setSpeed(1000)">1000x</button>
+  <button id="b-5000" onclick="setSpeed(5000)">5000x</button>
+  <input type="number" id="spd-in" min="1" max="50000" value="1" onchange="setCustomSpeed(this.value)">
+  <button id="b-pause" onclick="togglePause()">ПАУЗА</button>
+  <button onclick="resetTraining()">СБРОС</button>
+</div>
+
+<div class="toolbar">
+  <span style="font-size: 11px; font-weight: bold; padding-left: 2px;">МИР:</span>
+  <button id="m-8" onclick="setMapSize(8)">8x8</button>
+  <button id="m-10" class="active" onclick="setMapSize(10)">10x10</button>
+  <button id="m-14" onclick="setMapSize(14)">14x14</button>
+</div>
+
+<div id="weights-wrap">
+  <div id="weights-head">
+    <span style="font-size: 10px; opacity: 0.6;">864×5</span>
+    <div style="display: flex; gap: 5px;">
+      <button class="icon-btn" onclick="copyW()" title="Копировать">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
+      <button class="icon-btn" onclick="downloadW()" title="Скачать .txt">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <textarea id="w-box" readonly></textarea>
+</div>
+
+<script>
+let GRID = 10;
+const ALPHA = 0.3;
+const GAMMA = 0.85;
+let epsilon = 1.0;
+const EPS_MIN = 0.0;
+const EPS_DECAY = 0.9992;
+
+const STATE_COUNT = 864;
+let Q = [];
+function initQ() {
+  Q = [];
+  for (let i = 0; i < STATE_COUNT; i++) {
+    Q.push([0.0, 0.0, 0.0, 0.0, 0.0]);
+  }
+}
+initQ();
+
+let snake = [];
+let F = { x: 0, y: 0, z: -1 };
+let U = { x: 0, y: 1, z: 0 };
+let apple = { x: 0, y: 0, z: 0 };
+let score = 0;
+let best = 0;
+let episodes = 0;
+let stepsWithoutApple = 0;
+let recentPositions = [];
+
+let speed = 1;
+let paused = false;
+let lastStepTime = 0;
+let lastUI = 0;
+
+function cross(a, b) {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x
+  };
+}
+
+function dot(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function initGame() {
+  const m = Math.floor(GRID / 2);
+  snake = [
+    { x: m, y: m, z: m },
+    { x: m, y: m, z: m + 1 },
+    { x: m, y: m, z: m + 2 }
+  ];
+  F = { x: 0, y: 0, z: -1 };
+  U = { x: 0, y: 1, z: 0 };
+  score = 0;
+  stepsWithoutApple = 0;
+  recentPositions = [];
+  placeApple();
+}
+
+function placeApple() {
+  while (true) {
+    apple.x = Math.floor(Math.random() * GRID);
+    apple.y = Math.floor(Math.random() * GRID);
+    apple.z = Math.floor(Math.random() * GRID);
+    let hit = false;
+    for (let p of snake) {
+      if (p.x === apple.x && p.y === apple.y && p.z === apple.z) {
+        hit = true;
+        break;
+      }
+    }
+    if (!hit) break;
+  }
+}
+
+function isDanger(p) {
+  if (p.x < 0 || p.x >= GRID || p.y < 0 || p.y >= GRID || p.z < 0 || p.z >= GRID) return 1;
+  for (let i = 0; i < snake.length - 1; i++) {
+    if (snake[i].x === p.x && snake[i].y === p.y && snake[i].z === p.z) return 1;
+  }
+  return 0;
+}
+
+function getState() {
+  const h = snake[0];
+  const R = cross(F, U);
+
+  const dStraight = isDanger({ x: h.x + F.x, y: h.y + F.y, z: h.z + F.z });
+  const dLeft     = isDanger({ x: h.x - R.x, y: h.y - R.y, z: h.z - R.z });
+  const dRight    = isDanger({ x: h.x + R.x, y: h.y + R.y, z: h.z + R.z });
+  const dUp       = isDanger({ x: h.x + U.x, y: h.y + U.y, z: h.z + U.z });
+  const dDown     = isDanger({ x: h.x - U.x, y: h.y - U.y, z: h.z - U.z });
+
+  const dangerBits = (dStraight << 4) | (dLeft << 3) | (dRight << 2) | (dUp << 1) | dDown;
+
+  const delta = { x: apple.x - h.x, y: apple.y - h.y, z: apple.z - h.z };
+  const dF = dot(delta, F);
+  const dR = dot(delta, R);
+  const dU = dot(delta, U);
+
+  const codeF = dF > 0 ? 1 : (dF < 0 ? 2 : 0);
+  const codeR = dR > 0 ? 2 : (dR < 0 ? 0 : 1);
+  const codeU = dU > 0 ? 2 : (dU < 0 ? 0 : 1);
+
+  const appleCode = codeF * 9 + codeR * 3 + codeU;
+  return dangerBits * 27 + appleCode;
+}
+
+function mDist(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) + Math.abs(a.z - b.z);
+}
+
+function step() {
+  const st = getState();
+
+  let act = 0;
+  if (Math.random() < epsilon) {
+    act = Math.floor(Math.random() * 5);
+  } else {
+    const vals = Q[st];
+    let max = -Infinity;
+    let bestActs = [];
+    for (let i = 0; i < 5; i++) {
+      if (vals[i] > max) {
+        max = vals[i];
+        bestActs = [i];
+      } else if (vals[i] === max) {
+        bestActs.push(i);
+      }
+    }
+    act = bestActs[Math.floor(Math.random() * bestActs.length)];
+  }
+
+  const R = cross(F, U);
+  if (act === 0) {
+    // прямо
+  } else if (act === 1) { // влево
+    F = { x: -R.x, y: -R.y, z: -R.z };
+  } else if (act === 2) { // вправо
+    F = { x: R.x, y: R.y, z: R.z };
+  } else if (act === 3) { // вверх
+    const prevF = F;
+    F = { x: U.x, y: U.y, z: U.z };
+    U = { x: -prevF.x, y: -prevF.y, z: -prevF.z };
+  } else if (act === 4) { // вниз
+    const prevF = F;
+    F = { x: -U.x, y: -U.y, z: -U.z };
+    U = { x: prevF.x, y: prevF.y, z: prevF.z };
+  }
+
+  const head = snake[0];
+  const prevD = mDist(head, apple);
+
+  const newHead = { x: head.x + F.x, y: head.y + F.y, z: head.z + F.z };
+  stepsWithoutApple++;
+
+  let reward = -0.05;
+  let done = false;
+
+  const curD = mDist(newHead, apple);
+  reward += (prevD - curD) > 0 ? 1.5 : -1.8;
+
+  for (let rp of recentPositions) {
+    if (rp.x === newHead.x && rp.y === newHead.y && rp.z === newHead.z) {
+      reward -= 3.0;
+      break;
+    }
+  }
+  recentPositions.push({ x: newHead.x, y: newHead.y, z: newHead.z });
+  if (recentPositions.length > 10) recentPositions.shift();
+
+  const hitWall = newHead.x < 0 || newHead.x >= GRID || newHead.y < 0 || newHead.y >= GRID || newHead.z < 0 || newHead.z >= GRID;
+  let hitBody = false;
+  for (let i = 0; i < snake.length; i++) {
+    if (snake[i].x === newHead.x && snake[i].y === newHead.y && snake[i].z === newHead.z) {
+      hitBody = true;
+      break;
+    }
+  }
+
+  if (hitWall || hitBody) {
+    reward = -100.0;
+    done = true;
+  } else if (newHead.x === apple.x && newHead.y === apple.y && newHead.z === apple.z) {
+    reward = 100.0;
+    score++;
+    stepsWithoutApple = 0;
+    recentPositions = [];
+    if (score > best) best = score;
+    snake.unshift(newHead);
+    placeApple();
+  } else if (stepsWithoutApple > GRID * 12) {
+    reward = -50.0;
+    done = true;
+  } else {
+    snake.unshift(newHead);
+    snake.pop();
+  }
+
+  let maxNext = 0;
+  if (!done) {
+    const nextSt = getState();
+    maxNext = Math.max(...Q[nextSt]);
+  }
+
+  Q[st][act] += ALPHA * (reward + (done ? 0 : GAMMA * maxNext) - Q[st][act]);
+
+  if (done) {
+    episodes++;
+    epsilon = Math.max(EPS_MIN, epsilon * EPS_DECAY);
+    initGame();
+  }
+}
+
+function numFmt(v) {
+  return (v >= 0 ? "+" : "-") + Math.abs(v).toFixed(5);
+}
+
+function renderUI() {
+  document.getElementById("v-ep").textContent = episodes;
+  document.getElementById("v-eps").textContent = epsilon.toFixed(4);
+  document.getElementById("v-best").textContent = best;
+  document.getElementById("v-score").textContent = score;
+
+  let lines = [];
+  for (let i = 0; i < STATE_COUNT; i++) {
+    lines.push(`${numFmt(Q[i][0])} ${numFmt(Q[i][1])} ${numFmt(Q[i][2])} ${numFmt(Q[i][3])} ${numFmt(Q[i][4])}`);
+  }
+  document.getElementById("w-box").value = lines.join("\n");
+}
+
+const container = document.getElementById("canvas-container");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+function updateRendererSize() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+window.addEventListener("resize", updateRendererSize);
+
+let cubeWire = null;
+let floorGrid = null;
+
+function rebuild3DWorld() {
+  if (cubeWire) scene.remove(cubeWire);
+  if (floorGrid) scene.remove(floorGrid);
+
+  const cubeBorderGeo = new THREE.BoxGeometry(GRID, GRID, GRID);
+  const cubeEdges = new THREE.EdgesGeometry(cubeBorderGeo);
+  cubeWire = new THREE.LineSegments(cubeEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+  cubeWire.position.set(GRID / 2, GRID / 2, GRID / 2);
+  scene.add(cubeWire);
+
+  floorGrid = new THREE.GridHelper(GRID, GRID, 0x000000, 0xe0e0e0);
+  floorGrid.position.set(GRID / 2, 0, GRID / 2);
+  scene.add(floorGrid);
+
+  camRadius = GRID * 2.4;
+  updateCamera();
+}
+
+const appleGeo = new THREE.OctahedronGeometry(0.4);
+const appleMat = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
+const appleMesh = new THREE.Mesh(appleGeo, appleMat);
+scene.add(appleMesh);
+
+const BODY_SIZE = 0.74;
+const snakeGeom = new THREE.BoxGeometry(BODY_SIZE, BODY_SIZE, BODY_SIZE);
+const snakeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+const edgeGeom = new THREE.EdgesGeometry(snakeGeom);
+const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1.5 });
+
+const headGeom = new THREE.BoxGeometry(0.88, 0.88, 0.88);
+const headWireGeom = new THREE.EdgesGeometry(headGeom);
+const headLineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+
+let snakeMeshes = [];
+
+function createSnakeSegment(isHead) {
+  const group = new THREE.Group();
+  if (isHead) {
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), snakeMat);
+    const outline = new THREE.LineSegments(headWireGeom, headLineMat);
+    group.add(core);
+    group.add(outline);
+  } else {
+    const body = new THREE.Mesh(snakeGeom, snakeMat);
+    const outline = new THREE.LineSegments(edgeGeom, edgeMat);
+    group.add(body);
+    group.add(outline);
+  }
+  scene.add(group);
+  return group;
+}
+
+function sync3D() {
+  appleMesh.position.set(apple.x + 0.5, apple.y + 0.5, apple.z + 0.5);
+  appleMesh.rotation.y += 0.04;
+  appleMesh.rotation.x += 0.03;
+
+  while (snakeMeshes.length < snake.length) {
+    const isHead = snakeMeshes.length === 0;
+    snakeMeshes.push(createSnakeSegment(isHead));
+  }
+
+  for (let i = 0; i < snakeMeshes.length; i++) {
+    if (i < snake.length) {
+      snakeMeshes[i].visible = true;
+      snakeMeshes[i].position.set(snake[i].x + 0.5, snake[i].y + 0.5, snake[i].z + 0.5);
+    } else {
+      snakeMeshes[i].visible = false;
+    }
+  }
+}
+
+let camTheta = Math.PI / 4;
+let camPhi = Math.PI / 3;
+let camRadius = 24;
+let isDragging = false;
+let prevMouse = { x: 0, y: 0 };
+let pinchStartDist = 0;
+let pinchStartRadius = 24;
+
+function updateCamera() {
+  const center = GRID / 2;
+  camera.position.x = center + camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+  camera.position.y = center + camRadius * Math.cos(camPhi);
+  camera.position.z = center + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+  camera.lookAt(center, center, center);
+}
+
+container.addEventListener("mousedown", e => {
+  isDragging = true;
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener("mouseup", () => isDragging = false);
+window.addEventListener("mousemove", e => {
+  if (!isDragging) return;
+  const dx = e.clientX - prevMouse.x;
+  const dy = e.clientY - prevMouse.y;
+  camTheta -= dx * 0.01;
+  camPhi = Math.max(0.1, Math.min(Math.PI - 0.1, camPhi - dy * 0.01));
+  prevMouse = { x: e.clientX, y: e.clientY };
+  updateCamera();
+});
+container.addEventListener("wheel", e => {
+  e.preventDefault();
+  camRadius = Math.max(GRID * 1.1, Math.min(GRID * 5, camRadius + e.deltaY * 0.03));
+  updateCamera();
+}, { passive: false });
+
+container.addEventListener("touchstart", e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchStartDist = Math.hypot(dx, dy);
+    pinchStartRadius = camRadius;
+  }
+}, { passive: false });
+
+container.addEventListener("touchmove", e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    const dx = e.touches[0].clientX - prevMouse.x;
+    const dy = e.touches[0].clientY - prevMouse.y;
+    camTheta -= dx * 0.008;
+    camPhi = Math.max(0.1, Math.min(Math.PI - 0.1, camPhi - dy * 0.008));
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    updateCamera();
+  } else if (e.touches.length === 2 && pinchStartDist > 0) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const currentDist = Math.hypot(dx, dy);
+    const ratio = pinchStartDist / currentDist;
+    camRadius = Math.max(GRID * 1.1, Math.min(GRID * 5, pinchStartRadius * ratio));
+    updateCamera();
+  }
+}, { passive: false });
+
+container.addEventListener("touchend", e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else {
+    isDragging = false;
+    pinchStartDist = 0;
+  }
+});
+
+function loop(t) {
+  if (!paused) {
+    if (speed === 1) {
+      if (t - lastStepTime >= 250) {
+        step();
+        lastStepTime = t;
+      }
+    } else {
+      const iters = speed;
+      for (let i = 0; i < iters; i++) {
+        step();
+      }
+    }
+
+    sync3D();
+
+    if (t - lastUI > 150) {
+      renderUI();
+      lastUI = t;
+    }
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+function setSpeed(v) {
+  speed = parseInt(v);
+  document.getElementById("spd-in").value = speed;
+  document.querySelectorAll(".toolbar button").forEach(b => {
+    if (b.id.startsWith("b-") && b.id !== "b-pause") b.classList.remove("active");
+  });
+  const btn = document.getElementById("b-" + v);
+  if (btn) btn.classList.add("active");
+}
+
+function setCustomSpeed(val) {
+  const v = Math.max(1, Math.min(50000, parseInt(val) || 1));
+  speed = v;
+  document.getElementById("spd-in").value = v;
+  document.querySelectorAll(".toolbar button").forEach(b => {
+    if (b.id.startsWith("b-") && b.id !== "b-pause") b.classList.remove("active");
+  });
+  const btn = document.getElementById("b-" + v);
+  if (btn) btn.classList.add("active");
+}
+
+function setMapSize(sz) {
+  GRID = parseInt(sz);
+  document.querySelectorAll(".toolbar button").forEach(b => {
+    if (b.id.startsWith("m-")) b.classList.remove("active");
+  });
+  const btn = document.getElementById("m-" + sz);
+  if (btn) btn.classList.add("active");
+  rebuild3DWorld();
+  initGame();
+  sync3D();
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById("b-pause").textContent = paused ? "ПУСК" : "ПАУЗА";
+  if (paused) {
+    renderUI();
+    sync3D();
+  }
+}
+
+function resetTraining() {
+  initQ();
+  epsilon = 1.0;
+  episodes = 0;
+  best = 0;
+  initGame();
+  renderUI();
+  sync3D();
+}
+
+function copyW() {
+  const box = document.getElementById("w-box");
+  box.select();
+  box.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(box.value);
+}
+
+function downloadW() {
+  const text = document.getElementById("w-box").value;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "grisha_weights.txt";
+  a.click();
+}
+
+rebuild3DWorld();
+initGame();
+renderUI();
+updateRendererSize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
