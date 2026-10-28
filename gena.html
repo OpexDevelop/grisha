@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Гриша vs Геннадий 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #fff;
+    color: #000;
+    font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px;
+    user-select: none;
+    -webkit-user-select: none;
+    width: 100%;
+    overflow-x: hidden;
+  }
+  #hud {
+    width: 100%;
+    max-width: 480px;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 4px 0;
+    border-bottom: 2px solid #000;
+    margin-bottom: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .hud-row {
+    display: flex;
+    justify-content: space-between;
+  }
+  #canvas-container {
+    width: 100%;
+    max-width: 480px;
+    aspect-ratio: 1 / 1;
+    border: 3px solid #000;
+    position: relative;
+    background: #fff;
+    touch-action: none;
+    cursor: grab;
+  }
+  #canvas-container:active {
+    cursor: grabbing;
+  }
+  .toolbar {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  button {
+    background: #fff;
+    color: #000;
+    border: 2px solid #000;
+    font-family: inherit;
+    font-weight: bold;
+    padding: 4px 6px;
+    cursor: pointer;
+    font-size: 11px;
+    flex: 1 1 auto;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  button:hover, button.active {
+    background: #000;
+    color: #fff;
+  }
+  button svg {
+    stroke: currentColor;
+  }
+  input[type="number"] {
+    width: 55px;
+    border: 2px solid #000;
+    padding: 3px;
+    font-family: inherit;
+    font-weight: bold;
+    font-size: 11px;
+    text-align: center;
+  }
+  #weights-wrap {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 5px;
+  }
+  #weights-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    gap: 6px;
+  }
+  .icon-btn {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+  }
+  textarea {
+    width: 100%;
+    height: 100px;
+    border: 2px solid #000;
+    font-family: monospace;
+    font-size: 10px;
+    padding: 4px;
+    resize: vertical;
+    white-space: pre;
+    color: #000;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-row">
+    <span>■ ГРИША: <span id="g-score">0</span> (РЕК: <span id="g-best">0</span>) EPS: <span id="g-eps">1.000</span> ПОП: <span id="g-ep">0</span></span>
+  </div>
+  <div class="hud-row">
+    <span>□ ГЕНА:  <span id="h-score">0</span> (РЕК: <span id="h-best">0</span>) EPS: <span id="h-eps">1.000</span> ПОП: <span id="h-ep">0</span></span>
+  </div>
+</div>
+
+<div id="canvas-container"></div>
+
+<div class="toolbar">
+  <button id="b-05" onclick="setSpeed(0.5)">0.5x</button>
+  <button id="b-1" class="active" onclick="setSpeed(1)">1x</button>
+  <button id="b-10" onclick="setSpeed(10)">10x</button>
+  <button id="b-100" onclick="setSpeed(100)">100x</button>
+  <button id="b-1000" onclick="setSpeed(1000)">1000x</button>
+  <button id="b-5000" onclick="setSpeed(5000)">5000x</button>
+  <input type="number" id="spd-in" min="1" max="50000" value="1" onchange="setCustomSpeed(this.value)">
+  <button id="b-pause" onclick="togglePause()">ПАУЗА</button>
+  <button onclick="resetTraining()">СБРОС</button>
+</div>
+
+<div class="toolbar">
+  <span style="font-size: 11px; font-weight: bold;">КАРТА:</span>
+  <button id="m-8" onclick="setMapSize(8)">8x8</button>
+  <button id="m-12" class="active" onclick="setMapSize(12)">12x12</button>
+  <button id="m-16" onclick="setMapSize(16)">16x16</button>
+  <input type="number" id="map-in" min="6" max="60" value="12">
+  <button style="flex:0 0 auto;" onclick="setCustomMap()">ОК</button>
+</div>
+
+<div id="weights-wrap">
+  <div id="weights-head">
+    <div style="display:flex; gap:4px;">
+      <button id="tab-g" class="active" style="padding:2px 8px;" onclick="switchBrain('G')">■ МОЗГ ГРИШИ</button>
+      <button id="tab-h" style="padding:2px 8px;" onclick="switchBrain('H')">□ МОЗГ ГЕНЫ</button>
+    </div>
+    <div style="display: flex; gap: 4px;">
+      <button class="icon-btn" onclick="copyW()" title="Копировать">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
+      <button class="icon-btn" onclick="downloadW()" title="Скачать .txt">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <textarea id="w-box" readonly></textarea>
+</div>
+
+<script>
+let GRID = 12;
+const ALPHA = 0.3;
+const GAMMA = 0.85;
+const EPS_MIN = 0.0;
+const EPS_DECAY = 0.9994;
+const STATE_COUNT = 864;
+
+let Q_G = [];
+let Q_H = [];
+function createQTable() {
+  const t = [];
+  for (let i = 0; i < STATE_COUNT; i++) t.push([0.0, 0.0, 0.0, 0.0, 0.0]);
+  return t;
+}
+function initBrains() {
+  Q_G = createQTable();
+  Q_H = createQTable();
+}
+initBrains();
+
+let activeBrain = 'G';
+
+class Agent {
+  constructor(name, isWhite) {
+    this.name = name;
+    this.isWhite = isWhite;
+    this.epsilon = 1.0;
+    this.score = 0;
+    this.best = 0;
+    this.episodes = 0;
+    this.stepsWithoutApple = 0;
+    this.recent = [];
+    this.snake = [];
+    this.F = { x: 0, y: 0, z: -1 };
+    this.U = { x: 0, y: 1, z: 0 };
+  }
+
+  respawn(otherAgent) {
+    let ok = false;
+    let attempts = 0;
+    while (!ok && attempts < 100) {
+      attempts++;
+      const rx = 2 + Math.floor(Math.random() * (GRID - 4));
+      const ry = 2 + Math.floor(Math.random() * (GRID - 4));
+      const rz = 2 + Math.floor(Math.random() * (GRID - 4));
+      
+      let collides = false;
+      if (otherAgent) {
+        for (let p of otherAgent.snake) {
+          if (Math.abs(p.x - rx) <= 1 && Math.abs(p.y - ry) <= 1 && Math.abs(p.z - rz) <= 1) {
+            collides = true; break;
+          }
+        }
+      }
+      if (!collides) {
+        this.snake = [
+          { x: rx, y: ry, z: rz },
+          { x: rx, y: ry, z: rz + 1 },
+          { x: rx, y: ry, z: rz + 2 }
+        ];
+        this.F = { x: 0, y: 0, z: -1 };
+        this.U = { x: 0, y: 1, z: 0 };
+        ok = true;
+      }
+    }
+    this.score = 0;
+    this.stepsWithoutApple = 0;
+    this.recent = [];
+  }
+}
+
+const grisha = new Agent("Гриша", false);
+const gennadiy = new Agent("Гена", true);
+
+let apples = [];
+let traps = [];
+const FOOD_COUNT = 3;
+const TRAP_COUNT = 3;
+
+function cross(a, b) {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+function dot(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+function mDist(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) + Math.abs(a.z - b.z);
+}
+
+function spawnItems() {
+  apples = [];
+  traps = [];
+  while (apples.length < FOOD_COUNT) apples.push(getFreePos());
+  while (traps.length < TRAP_COUNT) traps.push(getFreePos());
+}
+
+function getFreePos() {
+  while (true) {
+    const pt = {
+      x: Math.floor(Math.random() * GRID),
+      y: Math.floor(Math.random() * GRID),
+      z: Math.floor(Math.random() * GRID)
+    };
+    let hit = false;
+    for (let p of grisha.snake) if (p.x === pt.x && p.y === pt.y && p.z === pt.z) hit = true;
+    for (let p of gennadiy.snake) if (p.x === pt.x && p.y === pt.y && p.z === pt.z) hit = true;
+    for (let a of apples) if (a.x === pt.x && a.y === pt.y && a.z === pt.z) hit = true;
+    for (let t of traps) if (t.x === pt.x && t.y === pt.y && t.z === pt.z) hit = true;
+    if (!hit) return pt;
+  }
+}
+
+function initMatch() {
+  grisha.respawn(null);
+  gennadiy.respawn(grisha);
+  spawnItems();
+}
+
+function isDanger(p, selfAgent, otherAgent) {
+  if (p.x < 0 || p.x >= GRID || p.y < 0 || p.y >= GRID || p.z < 0 || p.z >= GRID) return 1;
+  for (let i = 0; i < selfAgent.snake.length - 1; i++) {
+    if (selfAgent.snake[i].x === p.x && selfAgent.snake[i].y === p.y && selfAgent.snake[i].z === p.z) return 1;
+  }
+  for (let op of otherAgent.snake) {
+    if (op.x === p.x && op.y === p.y && op.z === p.z) return 1;
+  }
+  for (let tr of traps) {
+    if (tr.x === p.x && tr.y === p.y && tr.z === p.z) return 1;
+  }
+  return 0;
+}
+
+function getAgentState(agent, other) {
+  const h = agent.snake[0];
+  const R = cross(agent.F, agent.U);
+
+  const dStraight = isDanger({ x: h.x + agent.F.x, y: h.y + agent.F.y, z: h.z + agent.F.z }, agent, other);
+  const dLeft     = isDanger({ x: h.x - R.x, y: h.y - R.y, z: h.z - R.z }, agent, other);
+  const dRight    = isDanger({ x: h.x + R.x, y: h.y + R.y, z: h.z + R.z }, agent, other);
+  const dUp       = isDanger({ x: h.x + agent.U.x, y: h.y + agent.U.y, z: h.z + agent.U.z }, agent, other);
+  const dDown     = isDanger({ x: h.x - agent.U.x, y: h.y - agent.U.y, z: h.z - agent.U.z }, agent, other);
+
+  const dangerBits = (dStraight << 4) | (dLeft << 3) | (dRight << 2) | (dUp << 1) | dDown;
+
+  let nearestApple = apples[0];
+  let minD = Infinity;
+  for (let ap of apples) {
+    const d = mDist(h, ap);
+    if (d < minD) { minD = d; nearestApple = ap; }
+  }
+
+  const delta = { x: nearestApple.x - h.x, y: nearestApple.y - h.y, z: nearestApple.z - h.z };
+  const dF = dot(delta, agent.F);
+  const dR = dot(delta, R);
+  const dU = dot(delta, agent.U);
+
+  const codeF = dF > 0 ? 1 : (dF < 0 ? 2 : 0);
+  const codeR = dR > 0 ? 2 : (dR < 0 ? 0 : 1);
+  const codeU = dU > 0 ? 2 : (dU < 0 ? 0 : 1);
+
+  const appleCode = codeF * 9 + codeR * 3 + codeU;
+  return dangerBits * 27 + appleCode;
+}
+
+function pickAction(agent, qTable, state) {
+  if (Math.random() < agent.epsilon) {
+    return Math.floor(Math.random() * 5);
+  }
+  const vals = qTable[state];
+  let max = -Infinity;
+  let best = [];
+  for (let i = 0; i < 5; i++) {
+    if (vals[i] > max) { max = vals[i]; best = [i]; }
+    else if (vals[i] === max) best.push(i);
+  }
+  return best[Math.floor(Math.random() * best.length)];
+}
+
+function applyRotation(agent, act) {
+  const R = cross(agent.F, agent.U);
+  if (act === 1) agent.F = { x: -R.x, y: -R.y, z: -R.z };
+  else if (act === 2) agent.F = { x: R.x, y: R.y, z: R.z };
+  else if (act === 3) {
+    const oldF = agent.F;
+    agent.F = { x: agent.U.x, y: agent.U.y, z: agent.U.z };
+    agent.U = { x: -oldF.x, y: -oldF.y, z: -oldF.z };
+  } else if (act === 4) {
+    const oldF = agent.F;
+    agent.F = { x: -agent.U.x, y: -agent.U.y, z: -agent.U.z };
+    agent.U = { x: oldF.x, y: oldF.y, z: oldF.z };
+  }
+}
+
+function stepAgent(agent, other, qTable, otherQTable) {
+  const s = getAgentState(agent, other);
+  const a = pickAction(agent, qTable, s);
+  applyRotation(agent, a);
+
+  const h = agent.snake[0];
+  let nearestApple = apples[0];
+  let minD = Infinity;
+  for (let ap of apples) {
+    const d = mDist(h, ap);
+    if (d < minD) { minD = d; nearestApple = ap; }
+  }
+  const prevDist = mDist(h, nearestApple);
+
+  const nextPos = { x: h.x + agent.F.x, y: h.y + agent.F.y, z: h.z + agent.F.z };
+  agent.stepsWithoutApple++;
+
+  let reward = -0.05;
+  let done = false;
+
+  const curDist = mDist(nextPos, nearestApple);
+  reward += (prevDist - curDist) > 0 ? 1.5 : -1.8;
+
+  for (let rp of agent.recent) {
+    if (rp.x === nextPos.x && rp.y === nextPos.y && rp.z === nextPos.z) {
+      reward -= 3.0; break;
+    }
+  }
+  agent.recent.push({ x: nextPos.x, y: nextPos.y, z: nextPos.z });
+  if (agent.recent.length > 10) agent.recent.shift();
+
+  const hitWall = nextPos.x < 0 || nextPos.x >= GRID || nextPos.y < 0 || nextPos.y >= GRID || nextPos.z < 0 || nextPos.z >= GRID;
+  let hitSelf = false;
+  for (let i = 0; i < agent.snake.length; i++) {
+    if (agent.snake[i].x === nextPos.x && agent.snake[i].y === nextPos.y && agent.snake[i].z === nextPos.z) {
+      hitSelf = true; break;
+    }
+  }
+  let hitOtherBody = false;
+  for (let i = 0; i < other.snake.length; i++) {
+    if (other.snake[i].x === nextPos.x && other.snake[i].y === nextPos.y && other.snake[i].z === nextPos.z) {
+      hitOtherBody = true; break;
+    }
+  }
+
+  let hitTrapIdx = -1;
+  for (let i = 0; i < traps.length; i++) {
+    if (traps[i].x === nextPos.x && traps[i].y === nextPos.y && traps[i].z === nextPos.z) {
+      hitTrapIdx = i; break;
+    }
+  }
+
+  let hitAppleIdx = -1;
+  for (let i = 0; i < apples.length; i++) {
+    if (apples[i].x === nextPos.x && apples[i].y === nextPos.y && apples[i].z === nextPos.z) {
+      hitAppleIdx = i; break;
+    }
+  }
+
+  if (hitWall || hitSelf || hitOtherBody) {
+    reward = -100.0;
+    done = true;
+    if (hitOtherBody) {
+      const otherState = getAgentState(other, agent);
+      otherQTable[otherState][0] += ALPHA * 60.0;
+    }
+  } else if (hitTrapIdx !== -1) {
+    reward = -80.0;
+    traps[hitTrapIdx] = getFreePos();
+    if (agent.snake.length > 2) {
+      agent.snake.pop();
+    } else {
+      done = true;
+    }
+  } else if (hitAppleIdx !== -1) {
+    reward = 100.0;
+    agent.score++;
+    agent.stepsWithoutApple = 0;
+    agent.recent = [];
+    if (agent.score > agent.best) agent.best = agent.score;
+    agent.snake.unshift(nextPos);
+    apples[hitAppleIdx] = getFreePos();
+  } else if (agent.stepsWithoutApple > GRID * 12) {
+    reward = -50.0;
+    done = true;
+  } else {
+    agent.snake.unshift(nextPos);
+    agent.snake.pop();
+  }
+
+  let maxNext = 0;
+  if (!done) {
+    const sNext = getAgentState(agent, other);
+    maxNext = Math.max(...qTable[sNext]);
+  }
+  qTable[s][a] += ALPHA * (reward + (done ? 0 : GAMMA * maxNext) - qTable[s][a]);
+
+  if (done) {
+    agent.episodes++;
+    agent.epsilon = Math.max(EPS_MIN, agent.epsilon * EPS_DECAY);
+    agent.respawn(other);
+  }
+}
+
+function simStep() {
+  stepAgent(grisha, gennadiy, Q_G, Q_H);
+  stepAgent(gennadiy, grisha, Q_H, Q_G);
+}
+
+function numFmt(v) {
+  return (v >= 0 ? "+" : "-") + Math.abs(v).toFixed(5);
+}
+
+function renderUI() {
+  document.getElementById("g-score").textContent = grisha.score;
+  document.getElementById("g-best").textContent = grisha.best;
+  document.getElementById("g-eps").textContent = grisha.epsilon.toFixed(3);
+  document.getElementById("g-ep").textContent = grisha.episodes;
+
+  document.getElementById("h-score").textContent = gennadiy.score;
+  document.getElementById("h-best").textContent = gennadiy.best;
+  document.getElementById("h-eps").textContent = gennadiy.epsilon.toFixed(3);
+  document.getElementById("h-ep").textContent = gennadiy.episodes;
+
+  const targetQ = activeBrain === 'G' ? Q_G : Q_H;
+  let lines = [];
+  for (let i = 0; i < STATE_COUNT; i++) {
+    lines.push(`${numFmt(targetQ[i][0])} ${numFmt(targetQ[i][1])} ${numFmt(targetQ[i][2])} ${numFmt(targetQ[i][3])} ${numFmt(targetQ[i][4])}`);
+  }
+  document.getElementById("w-box").value = lines.join("\n");
+}
+
+function switchBrain(b) {
+  activeBrain = b;
+  document.getElementById("tab-g").classList.toggle("active", b === 'G');
+  document.getElementById("tab-h").classList.toggle("active", b === 'H');
+  renderUI();
+}
+
+const container = document.getElementById("canvas-container");
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+function updateRendererSize() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+}
+window.addEventListener("resize", updateRendererSize);
+
+let cubeWire = null;
+let floorGrid = null;
+
+function rebuild3DWorld() {
+  if (cubeWire) scene.remove(cubeWire);
+  if (floorGrid) scene.remove(floorGrid);
+
+  const cubeBorderGeo = new THREE.BoxGeometry(GRID, GRID, GRID);
+  const cubeEdges = new THREE.EdgesGeometry(cubeBorderGeo);
+  cubeWire = new THREE.LineSegments(cubeEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+  cubeWire.position.set(GRID / 2, GRID / 2, GRID / 2);
+  scene.add(cubeWire);
+
+  floorGrid = new THREE.GridHelper(GRID, GRID, 0x000000, 0xe0e0e0);
+  floorGrid.position.set(GRID / 2, 0, GRID / 2);
+  scene.add(floorGrid);
+
+  camRadius = GRID * 2.3;
+  updateCamera();
+}
+
+const appleGeo = new THREE.OctahedronGeometry(0.38);
+const appleMat = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
+let appleMeshes = [];
+
+const trapGeo = new THREE.IcosahedronGeometry(0.36, 0);
+const trapMat = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true });
+let trapMeshes = [];
+
+function createItemMeshes() {
+  for (let m of appleMeshes) scene.remove(m);
+  for (let m of trapMeshes) scene.remove(m);
+  appleMeshes = [];
+  trapMeshes = [];
+
+  for (let i = 0; i < FOOD_COUNT; i++) {
+    const mesh = new THREE.Mesh(appleGeo, appleMat);
+    scene.add(mesh);
+    appleMeshes.push(mesh);
+  }
+  for (let i = 0; i < TRAP_COUNT; i++) {
+    const mesh = new THREE.Mesh(trapGeo, trapMat);
+    scene.add(mesh);
+    trapMeshes.push(mesh);
+  }
+}
+
+const BODY_SIZE = 0.74;
+const snakeGeom = new THREE.BoxGeometry(BODY_SIZE, BODY_SIZE, BODY_SIZE);
+const edgeGeom = new THREE.EdgesGeometry(snakeGeom);
+
+const gBodyMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+const gEdgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 1.5 });
+
+const hBodyMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const hEdgeMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1.5 });
+
+let gMeshes = [];
+let hMeshes = [];
+
+function createSnakeSegment(isWhite, isHead) {
+  const grp = new THREE.Group();
+  const bodyMat = isWhite ? hBodyMat : gBodyMat;
+  const edgeMat = isWhite ? hEdgeMat : gEdgeMat;
+
+  if (isHead) {
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), isWhite ? gBodyMat : hBodyMat);
+    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.86, 0.86, 0.86)), isWhite ? hEdgeMat : gEdgeMat);
+    grp.add(core);
+    grp.add(outline);
+  } else {
+    const body = new THREE.Mesh(snakeGeom, bodyMat);
+    const outline = new THREE.LineSegments(edgeGeom, edgeMat);
+    grp.add(body);
+    grp.add(outline);
+  }
+  scene.add(grp);
+  return grp;
+}
+
+function syncSnake(agent, meshes, isWhite) {
+  while (meshes.length < agent.snake.length) {
+    const isHead = meshes.length === 0;
+    meshes.push(createSnakeSegment(isWhite, isHead));
+  }
+  for (let i = 0; i < meshes.length; i++) {
+    if (i < agent.snake.length) {
+      meshes[i].visible = true;
+      meshes[i].position.set(agent.snake[i].x + 0.5, agent.snake[i].y + 0.5, agent.snake[i].z + 0.5);
+    } else {
+      meshes[i].visible = false;
+    }
+  }
+}
+
+function sync3D() {
+  for (let i = 0; i < apples.length; i++) {
+    if (appleMeshes[i]) {
+      appleMeshes[i].position.set(apples[i].x + 0.5, apples[i].y + 0.5, apples[i].z + 0.5);
+      appleMeshes[i].rotation.y += 0.04;
+      appleMeshes[i].rotation.x += 0.03;
+    }
+  }
+  for (let i = 0; i < traps.length; i++) {
+    if (trapMeshes[i]) {
+      trapMeshes[i].position.set(traps[i].x + 0.5, traps[i].y + 0.5, traps[i].z + 0.5);
+      trapMeshes[i].rotation.y -= 0.03;
+      trapMeshes[i].rotation.z += 0.04;
+    }
+  }
+  syncSnake(grisha, gMeshes, false);
+  syncSnake(gennadiy, hMeshes, true);
+}
+
+let camTheta = Math.PI / 4;
+let camPhi = Math.PI / 3;
+let camRadius = 26;
+let isDragging = false;
+let prevMouse = { x: 0, y: 0 };
+let pinchStartDist = 0;
+let pinchStartRadius = 26;
+
+function updateCamera() {
+  const center = GRID / 2;
+  camera.position.x = center + camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+  camera.position.y = center + camRadius * Math.cos(camPhi);
+  camera.position.z = center + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+  camera.lookAt(center, center, center);
+}
+
+container.addEventListener("mousedown", e => { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; });
+window.addEventListener("mouseup", () => isDragging = false);
+window.addEventListener("mousemove", e => {
+  if (!isDragging) return;
+  camTheta -= (e.clientX - prevMouse.x) * 0.01;
+  camPhi = Math.max(0.1, Math.min(Math.PI - 0.1, camPhi - (e.clientY - prevMouse.y) * 0.01));
+  prevMouse = { x: e.clientX, y: e.clientY };
+  updateCamera();
+});
+container.addEventListener("wheel", e => {
+  e.preventDefault();
+  camRadius = Math.max(GRID * 1.1, Math.min(GRID * 5, camRadius + e.deltaY * 0.03));
+  updateCamera();
+}, { passive: false });
+
+container.addEventListener("touchstart", e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    pinchStartRadius = camRadius;
+  }
+}, { passive: false });
+
+container.addEventListener("touchmove", e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    camTheta -= (e.touches[0].clientX - prevMouse.x) * 0.008;
+    camPhi = Math.max(0.1, Math.min(Math.PI - 0.1, camPhi - (e.touches[0].clientY - prevMouse.y) * 0.008));
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    updateCamera();
+  } else if (e.touches.length === 2 && pinchStartDist > 0) {
+    const curDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    camRadius = Math.max(GRID * 1.1, Math.min(GRID * 5, pinchStartRadius * (pinchStartDist / curDist)));
+    updateCamera();
+  }
+}, { passive: false });
+
+container.addEventListener("touchend", e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  } else {
+    isDragging = false;
+    pinchStartDist = 0;
+  }
+});
+
+let speed = 1;
+let paused = false;
+let lastStepTime = 0;
+let lastUI = 0;
+
+function loop(t) {
+  if (!paused) {
+    if (speed < 1) {
+      if (t - lastStepTime >= 250) {
+        simStep();
+        lastStepTime = t;
+      }
+    } else if (speed === 1) {
+      if (t - lastStepTime >= 160) {
+        simStep();
+        lastStepTime = t;
+      }
+    } else {
+      const iters = speed;
+      for (let i = 0; i < iters; i++) {
+        simStep();
+      }
+    }
+
+    sync3D();
+
+    if (t - lastUI > 150) {
+      renderUI();
+      lastUI = t;
+    }
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+function setSpeed(v) {
+  speed = parseFloat(v);
+  document.getElementById("spd-in").value = speed;
+  document.querySelectorAll(".toolbar button").forEach(b => {
+    if (b.id.startsWith("b-") && b.id !== "b-pause") b.classList.remove("active");
+  });
+  const btn = document.getElementById("b-" + String(v).replace('.', ''));
+  if (btn) btn.classList.add("active");
+}
+
+function setCustomSpeed(val) {
+  const v = Math.max(0.1, Math.min(50000, parseFloat(val) || 1));
+  speed = v;
+  document.getElementById("spd-in").value = v;
+  document.querySelectorAll(".toolbar button").forEach(b => {
+    if (b.id.startsWith("b-") && b.id !== "b-pause") b.classList.remove("active");
+  });
+}
+
+function setMapSize(sz) {
+  GRID = parseInt(sz);
+  document.getElementById("map-in").value = GRID;
+  document.querySelectorAll(".toolbar button").forEach(b => {
+    if (b.id.startsWith("m-")) b.classList.remove("active");
+  });
+  const btn = document.getElementById("m-" + sz);
+  if (btn) btn.classList.add("active");
+  rebuild3DWorld();
+  initMatch();
+  sync3D();
+}
+
+function setCustomMap() {
+  const val = parseInt(document.getElementById("map-in").value);
+  if (val && val >= 6 && val <= 60) {
+    setMapSize(val);
+  }
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById("b-pause").textContent = paused ? "ПУСК" : "ПАУЗА";
+  if (paused) {
+    renderUI();
+    sync3D();
+  }
+}
+
+function resetTraining() {
+  initBrains();
+  grisha.epsilon = 1.0;
+  gennadiy.epsilon = 1.0;
+  grisha.episodes = 0;
+  gennadiy.episodes = 0;
+  grisha.best = 0;
+  gennadiy.best = 0;
+  initMatch();
+  renderUI();
+  sync3D();
+}
+
+function copyW() {
+  const box = document.getElementById("w-box");
+  box.select();
+  box.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(box.value);
+}
+
+function downloadW() {
+  const text = document.getElementById("w-box").value;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = activeBrain === 'G' ? "grisha_weights.txt" : "gennadiy_weights.txt";
+  a.click();
+}
+
+rebuild3DWorld();
+createItemMeshes();
+initMatch();
+renderUI();
+updateRendererSize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
